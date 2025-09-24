@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Base Mini App</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        button { padding: 12px 24px; margin: 10px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Base Mini App</h1>
+    <p>Взаимодействуйте с контрактом для активности в сети Base!</p>
+    
+    <div id="walletSection">
+        <button id="connectBtn">🔗 Connect Wallet</button>
+        <p id="walletInfo">Status: Not connected</p>
+    </div>
+    
+    <div id="appSection" style="display: none;">
+        <h3>📊 Ончейн взаимодействия:</h3>
+        <button id="interactBtn">✨ Single Interaction</button>
+        <button id="batchBtn">🚀 Batch Interaction (3x)</button>
+        <button id="checkBtn">📈 Check Stats</button>
+        
+        <div id="stats">
+            <h4>📊 Ваша статистика:</h4>
+            <p>Ваши взаимодействия: <span id="myInteractions">0</span></p>
+            <p>Всего взаимодействий: <span id="totalInteractions">0</span></p>
+        </div>
+    </div>
+    
+    <div id="status" class="status"></div>
+
+    <script src="https://cdn.ethers.io/lib/ethers-5.6.umd.min.js"></script>
+    <script>
+        let provider, signer, contract;
+        
+        // Адрес контракта из contract-address.txt
+        const contractAddress = "0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94";
+        const contractABI = [
+            "function interact() public",
+            "function batchInteract(uint8 count) public",
+            "function userInteractions(address) public view returns (uint256)",
+            "function totalInteractions() public view returns (uint256)",
+            "function getMyInteractions() public view returns (uint256)",
+            "event Interacted(address user, uint256 timestamp)"
+        ];
+
+        // Элементы DOM
+        const connectBtn = document.getElementById('connectBtn');
+        const interactBtn = document.getElementById('interactBtn');
+        const batchBtn = document.getElementById('batchBtn');
+        const checkBtn = document.getElementById('checkBtn');
+        const walletInfo = document.getElementById('walletInfo');
+        const statusDiv = document.getElementById('status');
+        const appSection = document.getElementById('appSection');
+
+        // Обработчики событий
+        connectBtn.addEventListener('click', connectWallet);
+        interactBtn.addEventListener('click', () => interact(1));
+        batchBtn.addEventListener('click', () => interact(3));
+        checkBtn.addEventListener('click', checkStats);
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    signer = provider.getSigner();
+                    contract = new ethers.Contract(contractAddress, contractABI, signer);
+                    
+                    const address = await signer.getAddress();
+                    walletInfo.textContent = `Connected: ${address.slice(0, 6)}...${address.slice(-4)}`;
+                    walletInfo.style.color = 'green';
+                    
+                    appSection.style.display = 'block';
+                    showStatus('✅ Кошелек подключен!', 'success');
+                    
+                    await checkStats();
+                } catch (error) {
+                    showStatus('❌ Ошибка подключения: ' + error.message, 'error');
+                }
+            } else {
+                showStatus('❌ Установите MetaMask!', 'error');
+            }
+        }
+
+        async function interact(count) {
+            if (!contract) {
+                showStatus('❌ Сначала подключите кошелек', 'error');
+                return;
+            }
+            
+            try {
+                interactBtn.disabled = true;
+                batchBtn.disabled = true;
+                
+                let tx;
+                if (count === 1) {
+                    showStatus('⏳ Отправка транзакции...', 'info');
+                    tx = await contract.interact();
+                } else {
+                    showStatus(`⏳ Отправка ${count} взаимодействий...`, 'info');
+                    tx = await contract.batchInteract(count);
+                }
+                
+                showStatus('✅ Транзакция отправлена! Ожидание подтверждения...', 'info');
+                
+                await tx.wait();
+                showStatus(`🎉 Успешно! ${count} взаимодействие(й) записано в блокчейн!`, 'success');
+                
+                await checkStats();
+            } catch (error) {
+                showStatus('❌ Ошибка: ' + error.message, 'error');
+            } finally {
+                interactBtn.disabled = false;
+                batchBtn.disabled = false;
+            }
+        }
+
+        async function checkStats() {
+            if (!contract || !signer) return;
+            
+            try {
+                const address = await signer.getAddress();
+                const myInteractions = await contract.getMyInteractions();
+                const totalInteractions = await contract.totalInteractions();
+                
+                document.getElementById('myInteractions').textContent = myInteractions.toString();
+                document.getElementById('totalInteractions').textContent = totalInteractions.toString();
+            } catch (error) {
+                console.error('Error checking stats:', error);
+            }
+        }
+
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        // Автоподключение если MetaMask уже подключен
+        window.addEventListener('load', async () => {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    const accounts = await provider.listAccounts();
+                    if (accounts.length > 0) {
+                        connectBtn.click();
+                    }
+                } catch (error) {
+                    console.log('No auto-connect');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
