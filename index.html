@@ -3,98 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Base Mini App</title>
-    <script src="https://cdn.ethers.io/lib/ethers-5.6.umd.min.js"></script>
+    <title>Base Mini App - Web3</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            max-width: 600px; 
-            margin: 50px auto; 
-            padding: 20px; 
-            text-align: center;
-        }
-        button { 
-            padding: 15px 30px; 
-            margin: 10px; 
-            font-size: 16px; 
-            cursor: pointer; 
-        }
-        .status { 
-            padding: 10px; 
-            margin: 10px 0; 
-            border-radius: 5px; 
-        }
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+        button { padding: 15px 30px; margin: 10px; font-size: 16px; cursor: pointer; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
-    <h1>🚀 Base Mini App</h1>
-    <button onclick="testEthers()">Test Ethers Loading</button>
+    <h1>🚀 Base Mini App (Web3.js)</h1>
     <button onclick="connectWallet()">Connect Wallet</button>
-    <div id="status"></div>
+    <div id="status">Status: Ready</div>
 
     <script>
-        function testEthers() {
-            if (typeof ethers === 'undefined') {
-                document.getElementById('status').innerHTML = 
-                    '<div class="error">❌ Ethers not loaded. Trying alternative CDN...</div>';
-                loadAlternativeEthers();
-            } else {
-                document.getElementById('status').innerHTML = 
-                    '<div class="success">✅ Ethers loaded successfully!</div>';
-            }
-        }
-
-        function loadAlternativeEthers() {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/ethers@5.6.9/dist/ethers.min.js';
-            script.onload = function() {
-                document.getElementById('status').innerHTML += 
-                    '<div class="success">✅ Alternative Ethers loaded!</div>';
-            };
-            script.onerror = function() {
-                document.getElementById('status').innerHTML += 
-                    '<div class="error">❌ Failed to load Ethers</div>';
-            };
-            document.head.appendChild(script);
-        }
-
         async function connectWallet() {
-            // Проверяем что ethers загружен
-            if (typeof ethers === 'undefined') {
-                document.getElementById('status').innerHTML = 
-                    '<div class="error">❌ Ethers library not loaded</div>';
-                return;
-            }
-
             if (typeof window.ethereum === 'undefined') {
-                document.getElementById('status').innerHTML = 
-                    '<div class="error">❌ Please install MetaMask</div>';
+                showStatus('❌ Please install MetaMask!', 'error');
                 return;
             }
 
             try {
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                document.getElementById('status').innerHTML = 
-                    '<div class="success">✅ Wallet connected!</div>';
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const web3 = new Web3(window.ethereum);
+                const accounts = await web3.eth.getAccounts();
+                
+                showStatus('✅ Connected: ' + accounts[0].slice(0, 6) + '...' + accounts[0].slice(-4), 'success');
+                
             } catch (error) {
-                document.getElementById('status').innerHTML = 
-                    '<div class="error">❌ ' + error.message + '</div>';
+                showStatus('❌ Error: ' + error.message, 'error');
             }
         }
 
-        // Проверяем загрузку при старте
-        window.addEventListener('load', function() {
-            if (typeof ethers === 'undefined') {
-                document.getElementById('status').innerHTML = 
-                    '<div class="error">Ethers not loaded on page load</div>';
-            } else {
-                document.getElementById('status').innerHTML = 
-                    '<div class="success">Ethers ready!</div>';
-            }
-        });
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (type === 'success' ? 'success' : 'error');
+        }
     </script>
 </body>
 </html>
