@@ -269,6 +269,72 @@
         }
 
         async function interact(count) {
+    if (!contract || !userAccount) {
+        showStatus('❌ Please connect wallet first', 'error');
+        return;
+    }
+    
+    try {
+        interactBtn.disabled = true;
+        batchBtn.disabled = true;
+        
+        // Получаем текущий gas price
+        const gasPrice = await web3.eth.getGasPrice();
+        const optimizedGasPrice = Math.floor(Number(gasPrice) * 0.8); // -20%
+        
+        let transaction;
+        if (count === 1) {
+            showStatus('⏳ Sending transaction...', 'info');
+            transaction = contract.methods.interact();
+        } else {
+            showStatus(`⏳ Sending ${count} interactions...`, 'info');
+            transaction = contract.methods.batchInteract(count);
+        }
+        
+        // Оцениваем газ
+        const gasEstimate = await transaction.estimateGas({
+            from: userAccount
+        });
+        
+        console.log('Gas estimate:', gasEstimate);
+        console.log('Gas price:', optimizedGasPrice);
+        
+        // Отправляем с оптимизированным газом
+        const receipt = await transaction.send({
+            from: userAccount,
+            gas: gasEstimate,
+            gasPrice: optimizedGasPrice
+        });
+        
+        const gasUsed = receipt.gasUsed;
+        const txCost = web3.utils.fromWei((BigInt(gasUsed) * BigInt(optimizedGasPrice)).toString(), 'ether');
+        
+        showStatus(`🎉 Success! Cost: ${parseFloat(txCost).toFixed(6)} ETH`, 'success');
+        await checkStats();
+        
+    } catch (error) {
+        if (error.code === 4001) {
+            showStatus('❌ Transaction rejected by user', 'error');
+        } else if (error.message.includes('insufficient funds')) {
+            showStatus('❌ Insufficient funds for gas', 'error');
+        } else {
+            // Пробуем с стандартными настройками газа
+            showStatus('🔄 Trying with default gas...', 'info');
+            try {
+                const receipt = await transaction.send({ from: userAccount });
+                showStatus('🎉 Success with default gas!', 'success');
+                await checkStats();
+            } catch (retryError) {
+                showStatus('❌ Error: ' + retryError.message, 'error');
+            }
+        }
+    } finally {
+        interactBtn.disabled = false;
+        batchBtn.disabled = false;
+    }
+}
+
+        async function interact(count) {
             if (!contract || !userAccount) {
                 showStatus('❌ Please connect wallet first', 'error');
                 return;
