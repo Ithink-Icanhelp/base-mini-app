@@ -153,19 +153,17 @@
     </div>
 
     <script>
-        // Конфигурация контрактов
         const CONTRACT_CONFIG = {
-            '0x2105': { // Base Mainnet
-                address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94',
-                name: 'Base Mainnet'
+            '0x2105': { 
+                address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94', 
+                name: 'Base Mainnet' 
             },
-            '0xaa36a7': { // Base Sepolia
-                address: '0x081e98a2602Be2A7d5B3F55309ABA2F6C4c2F1Aa',
-                name: 'Base Sepolia'
+            '0xaa36a7': { 
+                address: '0x081e98a2602Be2A7d5B3F55309ABA2F6C4c2F1Aa', 
+                name: 'Base Sepolia' 
             }
         };
 
-        // ABI контракта
         const CONTRACT_ABI = [
             {
                 "inputs": [],
@@ -175,7 +173,7 @@
                 "type": "function"
             },
             {
-                "inputs": [{"internalType": "uint8","name": "count","type": "uint8"}],
+                "inputs": [],
                 "name": "batchInteract",
                 "outputs": [],
                 "stateMutability": "nonpayable",
@@ -206,7 +204,6 @@
 
         let web3, contract, userAccount;
 
-        // Элементы DOM
         const connectBtn = document.getElementById('connectBtn');
         const interactBtn = document.getElementById('interactBtn');
         const batchBtn = document.getElementById('batchBtn');
@@ -219,8 +216,8 @@
 
         // Обработчики событий
         connectBtn.addEventListener('click', connectWallet);
-        interactBtn.addEventListener('click', () => interact(1));
-        batchBtn.addEventListener('click', () => interact(3));
+        interactBtn.addEventListener('click', interact);
+        batchBtn.addEventListener('click', batchInteract);
         checkBtn.addEventListener('click', checkStats);
 
         async function connectWallet() {
@@ -230,17 +227,11 @@
             }
 
             try {
-                // Запрашиваем подключение аккаунтов
                 await window.ethereum.request({ method: 'eth_requestAccounts' });
-                
-                // Создаем экземпляр Web3
                 web3 = new Web3(window.ethereum);
-                
-                // Получаем аккаунт
                 const accounts = await web3.eth.getAccounts();
                 userAccount = accounts[0];
                 
-                // Получаем сеть
                 const chainId = await web3.eth.getChainId();
                 const chainIdHex = '0x' + chainId.toString(16);
                 
@@ -250,7 +241,6 @@
                     return;
                 }
                 
-                // Создаем экземпляр контракта
                 contract = new web3.eth.Contract(CONTRACT_ABI, config.address);
                 
                 walletInfo.innerHTML = `
@@ -268,177 +258,88 @@
             }
         }
 
-        async function interact(count) {
-    if (!contract || !userAccount) {
-        showStatus('❌ Please connect wallet first', 'error');
-        return;
-    }
-    
-    try {
-        interactBtn.disabled = true;
-        batchBtn.disabled = true;
-        
-        // Получаем текущий gas price
-        const gasPrice = await web3.eth.getGasPrice();
-        const optimizedGasPrice = Math.floor(Number(gasPrice) * 0.8); // -20%
-        
-        let transaction;
-        if (count === 1) {
-            showStatus('⏳ Sending transaction...', 'info');
-            transaction = contract.methods.interact();
-        } else {
-            showStatus(`⏳ Sending ${count} interactions...`, 'info');
-            transaction = contract.methods.batchInteract(count);
-        }
-        
-        // Оцениваем газ
-        const gasEstimate = await transaction.estimateGas({
-            from: userAccount
-        });
-        
-        console.log('Gas estimate:', gasEstimate);
-        console.log('Gas price:', optimizedGasPrice);
-        
-        // Отправляем с оптимизированным газом
-        const receipt = await transaction.send({
-            from: userAccount,
-            gas: gasEstimate,
-            gasPrice: optimizedGasPrice
-        });
-        
-        const gasUsed = receipt.gasUsed;
-        const txCost = web3.utils.fromWei((BigInt(gasUsed) * BigInt(optimizedGasPrice)).toString(), 'ether');
-        
-        showStatus(`🎉 Success! Cost: ${parseFloat(txCost).toFixed(6)} ETH`, 'success');
-        await checkStats();
-        
-    } catch (error) {
-        if (error.code === 4001) {
-            showStatus('❌ Transaction rejected by user', 'error');
-        } else if (error.message.includes('insufficient funds')) {
-            showStatus('❌ Insufficient funds for gas', 'error');
-        } else {
-            // Пробуем с стандартными настройками газа
-            showStatus('🔄 Trying with default gas...', 'info');
+        async function interact() {
+            if (!contract || !userAccount) {
+                showStatus('❌ Please connect wallet first', 'error');
+                return;
+            }
+            
             try {
-                const receipt = await transaction.send({ from: userAccount });
-                showStatus('🎉 Success with default gas!', 'success');
+                interactBtn.disabled = true;
+                batchBtn.disabled = true;
+                
+                showStatus('⏳ Sending transaction...', 'info');
+                
+                const transaction = contract.methods.interact();
+                const gasEstimate = await transaction.estimateGas({ from: userAccount });
+                
+                // Ключевое: НЕ указываем gasPrice - используем стандартный
+                const receipt = await transaction.send({
+                    from: userAccount,
+                    gas: gasEstimate
+                });
+                
+                showStatus('🎉 Transaction confirmed!', 'success');
                 await checkStats();
-            } catch (retryError) {
-                showStatus('❌ Error: ' + retryError.message, 'error');
+                
+            } catch (error) {
+                if (error.code === 4001) {
+                    showStatus('❌ Transaction rejected by user', 'error');
+                } else if (error.message.includes('insufficient funds')) {
+                    showStatus('❌ Insufficient funds for gas', 'error');
+                } else {
+                    showStatus('❌ Error: ' + error.message, 'error');
+                }
+            } finally {
+                interactBtn.disabled = false;
+                batchBtn.disabled = false;
             }
         }
-    } finally {
-        interactBtn.disabled = false;
-        batchBtn.disabled = false;
-    }
-}
 
-    async function interact(methodName) {
-        if (!contract || !userAccount) {
-            showStatus('❌ Please connect wallet first', 'error');
-            return;
-        }
-        
-        try {
-            interactBtn.disabled = true;
-            cheapInteractBtn.disabled = true;
-            batchBtn.disabled = true;
-            
-            showStatus('⏳ Estimating gas...', 'info');
-            
-            const transaction = contract.methods[methodName]();
-            
-            // 1. Оцениваем газ БЕЗ указания gasPrice
-            const gasEstimate = await transaction.estimateGas({
-                from: userAccount
-            });
-            
-            // 2. Получаем текущий gas price от сети (стандартный)
-            const currentGasPrice = await web3.eth.getGasPrice();
-            
-            // 3. Используем стандартный gas price (не повышаем его)
-            const gasPrice = currentGasPrice; // Оставляем как есть
-            
-            console.log('Gas estimate:', gasEstimate);
-            console.log('Standard gas price:', web3.utils.fromWei(gasPrice, 'gwei'), 'Gwei');
-            
-            showStatus('⏳ Sending transaction with standard gas...', 'info');
-            
-            // 4. Отправляем с стандартными настройками
-            const receipt = await transaction.send({
-                from: userAccount,
-                gas: Math.floor(gasEstimate * 1.1), // +10% buffer
-                // НЕ указываем gasPrice - используем стандартный от сети
-            });
-            
-            const gasUsed = receipt.gasUsed;
-            const txCost = web3.utils.fromWei((BigInt(gasUsed) * BigInt(receipt.effectiveGasPrice)).toString(), 'ether');
-            const costInDollars = (parseFloat(txCost) * 1600).toFixed(4); // Примерный курс ETH
-            
-            showStatus(`🎉 Success! Cost: ${parseFloat(txCost).toFixed(6)} ETH ($${costInDollars})`, 'success');
-            await checkStats();
-            
-        } catch (error) {
-            if (error.code === 4001) {
-                showStatus('❌ Transaction rejected by user', 'error');
-            } else if (error.message.includes('insufficient funds')) {
-                showStatus('❌ Insufficient funds for gas', 'error');
-            } else {
-                showStatus('❌ Error: ' + error.message, 'error');
+        async function batchInteract() {
+            if (!contract || !userAccount) {
+                showStatus('❌ Please connect wallet first', 'error');
+                return;
             }
-        } finally {
-            interactBtn.disabled = false;
-            cheapInteractBtn.disabled = false;
-            batchBtn.disabled = false;
-        }
-    }
-
-async function batchInteract() {
-    if (!contract || !userAccount) {
-        showStatus('❌ Please connect wallet first', 'error');
-        return;
-    }
-    
-    try {
-        interactBtn.disabled = true;
-        cheapInteractBtn.disabled = true;
-        batchBtn.disabled = true;
-        
-        showStatus('⏳ Sending batch transaction...', 'info');
-        
-        // Для пакетной операции просто вызываем 3 раза cheapInteract
-        // Но лучше создать отдельную функцию в контракте
-        
-        const transaction = contract.methods.cheapInteract();
-        
-        // Используем стандартный газ
-        const gasEstimate = await transaction.estimateGas({ from: userAccount });
-        
-        // Отправляем 3 транзакции с стандартным газом
-        for (let i = 0; i < 3; i++) {
-            const receipt = await transaction.send({
-                from: userAccount,
-                gas: gasEstimate
-                // НЕ указываем gasPrice - стандартный
-            });
             
-            if (i < 2) {
-                showStatus(`⏳ Batch ${i+1}/3 completed...`, 'info');
+            try {
+                interactBtn.disabled = true;
+                batchBtn.disabled = true;
+                
+                showStatus('⏳ Sending 3 interactions...', 'info');
+                
+                // Отправляем 3 транзакции с стандартным газом
+                for (let i = 0; i < 3; i++) {
+                    const transaction = contract.methods.interact();
+                    const gasEstimate = await transaction.estimateGas({ from: userAccount });
+                    
+                    await transaction.send({
+                        from: userAccount,
+                        gas: gasEstimate
+                        // НЕ указываем gasPrice - используем стандартный
+                    });
+                    
+                    if (i < 2) {
+                        showStatus(`⏳ Completed ${i+1}/3 interactions...`, 'info');
+                    }
+                }
+                
+                showStatus('🎉 3 interactions completed!', 'success');
+                await checkStats();
+                
+            } catch (error) {
+                if (error.code === 4001) {
+                    showStatus('❌ Transaction rejected by user', 'error');
+                } else if (error.message.includes('insufficient funds')) {
+                    showStatus('❌ Insufficient funds for gas', 'error');
+                } else {
+                    showStatus('❌ Error: ' + error.message, 'error');
+                }
+            } finally {
+                interactBtn.disabled = false;
+                batchBtn.disabled = false;
             }
         }
-        
-        showStatus('🎉 Batch transaction completed!', 'success');
-        await checkStats();
-        
-    } catch (error) {
-        showStatus('❌ Error: ' + error.message, 'error');
-    } finally {
-        interactBtn.disabled = false;
-        cheapInteractBtn.disabled = false;
-        batchBtn.disabled = false;
-    }
-}
 
         async function checkStats() {
             if (!contract || !userAccount) return;
