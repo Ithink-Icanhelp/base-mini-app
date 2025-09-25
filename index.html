@@ -266,33 +266,47 @@
     </div>
 
     <script>
-        // Конфигурация контракта активации
-        const ACTIVATION_CONTRACT = {
-            address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94', // Ваш существующий контракт
-            abi: [
-                {
-                    "inputs": [],
-                    "name": "activateScore",
-                    "outputs": [],
-                    "stateMutability": "nonpayable",
-                    "type": "function"
-                },
-                {
-                    "inputs": [{"internalType": "address","name": "","type": "address"}],
-                    "name": "userActivations",
-                    "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
-                    "stateMutability": "view",
-                    "type": "function"
-                },
-                {
-                    "inputs": [{"internalType": "address","name": "user","type": "address"}],
-                    "name": "isActivated",
-                    "outputs": [{"internalType": "bool","name": "","type": "bool"}],
-                    "stateMutability": "view",
-                    "type": "function"
-                }
-            ]
-        };
+// Конфигурация контракта активации - используем ваш существующий контракт
+const ACTIVATION_CONTRACT = {
+    address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94', // Ваш контракт
+    abi: [
+        {
+            "inputs": [],
+            "name": "interact",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "batchInteract",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [{"internalType": "address","name": "","type": "address"}],
+            "name": "userInteractions",
+            "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "totalInteractions",
+            "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "getMyInteractions",
+            "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+        }
+    ]
+};
 
         class BaseScoreApp {
             constructor() {
