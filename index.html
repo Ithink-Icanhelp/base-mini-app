@@ -60,6 +60,7 @@
         .btn-primary { background: #0052FF; color: white; }
         .btn-success { background: #00C853; color: white; }
         .btn-warning { background: #FF9100; color: white; }
+        .btn-danger { background: #FF4444; color: white; }
         .btn:disabled { background: #ccc; cursor: not-allowed; }
         
         .btn:hover:not(:disabled) {
@@ -155,6 +156,19 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
+        .activation-section {
+            text-align: center;
+            padding: 40px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .activation-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        
         .loading {
             text-align: center;
             padding: 40px;
@@ -163,6 +177,15 @@
         
         .hidden {
             display: none;
+        }
+        
+        .transaction-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
         }
     </style>
 </head>
@@ -178,9 +201,20 @@
             <div id="walletInfo" class="wallet-info">Status: Not connected</div>
         </div>
         
+        <div id="activationSection" class="activation-section hidden">
+            <div class="activation-icon">🔐</div>
+            <h2>Activate Your Base Score</h2>
+            <p>To calculate your onchain reputation, you need to activate your score by signing a transaction.</p>
+            <p class="transaction-info">
+                <strong>Gas Fee:</strong> ~$0.01 - $0.05<br>
+                <strong>No tokens will be transferred</strong>
+            </p>
+            <button id="activateBtn" class="btn btn-success">✨ Activate Score</button>
+        </div>
+        
         <div id="loading" class="loading hidden">
-            <h3>⏳ Analyzing your onchain activity...</h3>
-            <p>This may take a few seconds</p>
+            <h3>⏳ Processing transaction...</h3>
+            <p>Please confirm the transaction in your wallet</p>
         </div>
         
         <div id="scoreSection" class="hidden">
@@ -190,7 +224,7 @@
                     <div class="score-number" id="totalScore">-</div>
                     <div class="score-rank" id="scoreRank">-</div>
                     <div style="margin-top: 20px; font-size: 0.9em;">
-                        Based on your Base Mainnet activity
+                        Activated on: <span id="activationDate">-</span>
                     </div>
                 </div>
                 
@@ -232,11 +266,40 @@
     </div>
 
     <script>
+        // Конфигурация контракта активации
+        const ACTIVATION_CONTRACT = {
+            address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94', // Ваш существующий контракт
+            abi: [
+                {
+                    "inputs": [],
+                    "name": "activateScore",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [{"internalType": "address","name": "","type": "address"}],
+                    "name": "userActivations",
+                    "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [{"internalType": "address","name": "user","type": "address"}],
+                    "name": "isActivated",
+                    "outputs": [{"internalType": "bool","name": "","type": "bool"}],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+            ]
+        };
+
         class BaseScoreApp {
             constructor() {
                 this.web3 = null;
                 this.userAccount = null;
-                this.walletData = null;
+                this.activationContract = null;
+                this.isActivated = false;
                 
                 this.initializeElements();
                 this.attachEventListeners();
@@ -244,11 +307,13 @@
             
             initializeElements() {
                 this.connectBtn = document.getElementById('connectBtn');
+                this.activateBtn = document.getElementById('activateBtn');
                 this.refreshBtn = document.getElementById('refreshBtn');
                 this.shareBtn = document.getElementById('shareBtn');
                 this.walletInfo = document.getElementById('walletInfo');
                 this.statusDiv = document.getElementById('status');
                 this.loadingDiv = document.getElementById('loading');
+                this.activationSection = document.getElementById('activationSection');
                 this.scoreSection = document.getElementById('scoreSection');
                 
                 // Score elements
@@ -258,10 +323,12 @@
                 this.volume = document.getElementById('volume');
                 this.activeDays = document.getElementById('activeDays');
                 this.contracts = document.getElementById('contracts');
+                this.activationDate = document.getElementById('activationDate');
             }
             
             attachEventListeners() {
                 this.connectBtn.addEventListener('click', () => this.connectWallet());
+                this.activateBtn.addEventListener('click', () => this.activateScore());
                 this.refreshBtn.addEventListener('click', () => this.calculateScore());
                 this.shareBtn.addEventListener('click', () => this.shareScore());
             }
@@ -283,7 +350,14 @@
                     const chainId = await this.web3.eth.getChainId();
                     if (chainId !== 8453 && chainId !== 84532) { // Base Mainnet/Sepolia
                         this.showStatus('⚠️ Please switch to Base Network', 'info');
+                        return;
                     }
+                    
+                    // Инициализируем контракт активации
+                    this.activationContract = new this.web3.eth.Contract(
+                        ACTIVATION_CONTRACT.abi, 
+                        ACTIVATION_CONTRACT.address
+                    );
                     
                     this.walletInfo.innerHTML = `
                         <strong>Connected:</strong> ${this.userAccount.slice(0, 8)}...${this.userAccount.slice(-6)}<br>
@@ -293,16 +367,87 @@
                     this.connectBtn.textContent = '✅ Connected';
                     this.connectBtn.disabled = true;
                     
-                    await this.calculateScore();
+                    // Проверяем активацию
+                    await this.checkActivation();
                     
                 } catch (error) {
                     this.showStatus('❌ Connection error: ' + error.message, 'error');
                 }
             }
             
-            async calculateScore() {
-                if (!this.userAccount) {
+            async checkActivation() {
+                try {
+                    this.showStatus('🔍 Checking activation status...', 'info');
+                    
+                    // Проверяем активирован ли уже score
+                    this.isActivated = await this.activationContract.methods
+                        .isActivated(this.userAccount)
+                        .call();
+                    
+                    if (this.isActivated) {
+                        this.showStatus('✅ Score already activated!', 'success');
+                        await this.calculateScore();
+                    } else {
+                        this.activationSection.classList.remove('hidden');
+                        this.showStatus('⚠️ Activation required to calculate score', 'info');
+                    }
+                    
+                } catch (error) {
+                    console.error('Activation check error:', error);
+                    // Если контракт не поддерживает isActivated, считаем что не активирован
+                    this.activationSection.classList.remove('hidden');
+                    this.showStatus('🔐 Activate your score to continue', 'info');
+                }
+            }
+            
+            async activateScore() {
+                if (!this.activationContract || !this.userAccount) {
                     this.showStatus('❌ Please connect wallet first', 'error');
+                    return;
+                }
+                
+                try {
+                    this.activateBtn.disabled = true;
+                    this.showLoading(true);
+                    this.showStatus('⏳ Waiting for transaction confirmation...', 'info');
+                    
+                    // Отправляем транзакцию активации
+                    const transaction = this.activationContract.methods.activateScore();
+                    const gasEstimate = await transaction.estimateGas({ 
+                        from: this.userAccount 
+                    });
+                    
+                    const receipt = await transaction.send({
+                        from: this.userAccount,
+                        gas: gasEstimate
+                    });
+                    
+                    this.showStatus('🎉 Score activated successfully!', 'success');
+                    this.isActivated = true;
+                    this.activationSection.classList.add('hidden');
+                    
+                    // Сохраняем дату активации в localStorage
+                    localStorage.setItem(`baseScore_activated_${this.userAccount}`, new Date().toISOString());
+                    
+                    await this.calculateScore();
+                    
+                } catch (error) {
+                    if (error.code === 4001) {
+                        this.showStatus('❌ Transaction rejected by user', 'error');
+                    } else if (error.message.includes('insufficient funds')) {
+                        this.showStatus('❌ Insufficient funds for gas', 'error');
+                    } else {
+                        this.showStatus('❌ Activation error: ' + error.message, 'error');
+                    }
+                } finally {
+                    this.activateBtn.disabled = false;
+                    this.showLoading(false);
+                }
+            }
+            
+            async calculateScore() {
+                if (!this.isActivated) {
+                    this.showStatus('❌ Please activate your score first', 'error');
                     return;
                 }
                 
@@ -310,39 +455,54 @@
                     this.showLoading(true);
                     this.showStatus('🔍 Analyzing onchain data...', 'info');
                     
-                    // Симуляция данных (замените на реальный API вызов)
-                    const scoreData = await this.simulateScoreCalculation();
+                    // Получаем дату активации
+                    const activationDate = localStorage.getItem(`baseScore_activated_${this.userAccount}`) || 
+                                          new Date().toISOString();
+                    this.activationDate.textContent = new Date(activationDate).toLocaleDateString();
                     
+                    // Вызов Netlify функции для расчета скора
+                    const response = await fetch('/.netlify/functions/score', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            address: this.userAccount,
+                            activationDate: activationDate
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('API request failed');
+                    }
+                    
+                    const scoreData = await response.json();
                     this.displayScore(scoreData);
                     this.showStatus('✅ Score calculated successfully!', 'success');
                     
                 } catch (error) {
-                    this.showStatus('❌ Error calculating score: ' + error.message, 'error');
+                    console.error('Score calculation error:', error);
+                    // Fallback к mock данным
+                    const mockData = await this.getMockData();
+                    this.displayScore(mockData);
+                    this.showStatus('⚠️ Using demo data (API offline)', 'info');
                 } finally {
                     this.showLoading(false);
                 }
             }
             
-            async simulateScoreCalculation() {
-                // Временная симуляция - замените на реальный API вызов к Netlify function
-                return new Promise(resolve => {
-                    setTimeout(() => {
-                        const mockData = {
-                            totalScore: Math.floor(Math.random() * 100) + 450, // 450-550
-                            rank: `Top ${Math.floor(Math.random() * 20) + 5}%`,
-                            metrics: {
-                                transactionCount: Math.floor(Math.random() * 500) + 50,
-                                totalVolume: (Math.random() * 10).toFixed(2),
-                                activeDays: Math.floor(Math.random() * 90) + 10,
-                                uniqueContracts: Math.floor(Math.random() * 100) + 5,
-                                firstTransaction: '2023-08-15',
-                                lastTransaction: new Date().toISOString().split('T')[0]
-                            },
-                            timeline: this.generateMockTimeline()
-                        };
-                        resolve(mockData);
-                    }, 2000);
-                });
+            async getMockData() {
+                return {
+                    totalScore: Math.floor(Math.random() * 100) + 450,
+                    rank: `Top ${Math.floor(Math.random() * 20) + 5}%`,
+                    metrics: {
+                        transactionCount: Math.floor(Math.random() * 500) + 50,
+                        totalVolume: (Math.random() * 10).toFixed(2),
+                        activeDays: Math.floor(Math.random() * 90) + 10,
+                        uniqueContracts: Math.floor(Math.random() * 100) + 5
+                    },
+                    timeline: this.generateMockTimeline()
+                };
             }
             
             generateMockTimeline() {
