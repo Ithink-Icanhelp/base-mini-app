@@ -7,7 +7,6 @@
     <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* Стили остаются такими же как в предыдущем коде */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -198,12 +197,27 @@
         .tx-link:hover {
             text-decoration: underline;
         }
+        
+        .metamask-alert {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🏆 Base Score</h1>
         <p class="subtitle">Your onchain reputation on Base Network</p>
+        
+        <div id="metamaskAlert" class="metamask-alert hidden">
+            <h3>🦊 MetaMask Required</h3>
+            <p>Please install MetaMask to connect your wallet and use Base Score.</p>
+            <a href="https://metamask.io/download.html" target="_blank" class="btn btn-primary">Download MetaMask</a>
+        </div>
         
         <div class="wallet-section">
             <div style="text-align: center;">
@@ -334,6 +348,7 @@
                 
                 this.initializeElements();
                 this.attachEventListeners();
+                this.checkMetaMask();
             }
             
             initializeElements() {
@@ -347,6 +362,7 @@
                 this.activationSection = document.getElementById('activationSection');
                 this.scoreSection = document.getElementById('scoreSection');
                 this.txLink = document.getElementById('txLink');
+                this.metamaskAlert = document.getElementById('metamaskAlert');
                 
                 // Score elements
                 this.totalScore = document.getElementById('totalScore');
@@ -365,6 +381,35 @@
                 this.shareBtn.addEventListener('click', () => this.shareScore());
             }
             
+            checkMetaMask() {
+                if (typeof window.ethereum === 'undefined') {
+                    this.metamaskAlert.classList.remove('hidden');
+                    this.connectBtn.disabled = true;
+                    this.connectBtn.textContent = '❌ MetaMask Required';
+                } else {
+                    this.metamaskAlert.classList.add('hidden');
+                    this.connectBtn.disabled = false;
+                    
+                    // Проверяем автоподключение
+                    this.autoConnect();
+                }
+            }
+            
+            async autoConnect() {
+                try {
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_accounts' 
+                    });
+                    
+                    if (accounts.length > 0) {
+                        this.connectBtn.textContent = '🔄 Connecting...';
+                        await this.connectWallet();
+                    }
+                } catch (error) {
+                    console.log('Auto-connect failed:', error);
+                }
+            }
+            
             async connectWallet() {
                 if (typeof window.ethereum === 'undefined') {
                     this.showStatus('❌ Please install MetaMask!', 'error');
@@ -372,17 +417,25 @@
                 }
                 
                 try {
+                    this.connectBtn.disabled = true;
+                    this.connectBtn.textContent = '🔄 Connecting...';
                     this.showStatus('🔗 Connecting to wallet...', 'info');
                     
-                    await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    this.web3 = new Web3(window.ethereum);
-                    const accounts = await this.web3.eth.getAccounts();
-                    this.userAccount = accounts[0];
+                    // Запрашиваем аккаунты
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
                     
-                    const chainId = await this.web3.eth.getChainId();
-                    if (chainId !== 8453 && chainId !== 84532) {
-                        this.showStatus('⚠️ Please switch to Base Network', 'info');
+                    if (accounts.length === 0) {
+                        throw new Error('No accounts found');
                     }
+                    
+                    this.userAccount = accounts[0];
+                    this.web3 = new Web3(window.ethereum);
+                    
+                    // Получаем информацию о сети
+                    const chainId = await this.web3.eth.getChainId();
+                    const networkName = this.getNetworkName(chainId);
                     
                     // Инициализируем контракт
                     this.activationContract = new this.web3.eth.Contract(
@@ -390,19 +443,45 @@
                         ACTIVATION_CONTRACT.address
                     );
                     
+                    // Обновляем UI
                     this.walletInfo.innerHTML = `
                         <strong>Connected:</strong> ${this.userAccount.slice(0, 8)}...${this.userAccount.slice(-6)}<br>
-                        <strong>Network:</strong> Base ${chainId === 8453 ? 'Mainnet' : 'Testnet'}
+                        <strong>Network:</strong> ${networkName}<br>
+                        <strong>Chain ID:</strong> ${chainId}
                     `;
                     
                     this.connectBtn.textContent = '✅ Connected';
-                    this.connectBtn.disabled = true;
+                    this.showStatus('✅ Wallet connected successfully!', 'success');
                     
+                    // Проверяем активацию
                     await this.checkActivation();
                     
                 } catch (error) {
-                    this.showStatus('❌ Connection error: ' + error.message, 'error');
+                    console.error('Connection error:', error);
+                    
+                    if (error.code === 4001) {
+                        this.showStatus('❌ Connection rejected by user', 'error');
+                    } else if (error.code === -32002) {
+                        this.showStatus('⚠️ Connection already pending', 'info');
+                    } else {
+                        this.showStatus('❌ Connection error: ' + error.message, 'error');
+                    }
+                    
+                    this.connectBtn.disabled = false;
+                    this.connectBtn.textContent = '🔗 Connect Wallet';
                 }
+            }
+            
+            getNetworkName(chainId) {
+                const networks = {
+                    1: 'Ethereum Mainnet',
+                    8453: 'Base Mainnet',
+                    84532: 'Base Sepolia',
+                    11155111: 'Sepolia',
+                    5: 'Goerli',
+                    137: 'Polygon'
+                };
+                return networks[chainId] || `Chain ID: ${chainId}`;
             }
             
             async checkActivation() {
@@ -419,7 +498,7 @@
                     if (this.isActivated) {
                         this.showStatus('✅ Already activated onchain!', 'success');
                         
-                        // Получаем дату активации из localStorage или используем текущую
+                        // Получаем дату активации
                         const activationDate = localStorage.getItem(`baseScore_activated_${this.userAccount}`) || 
                                               new Date().toISOString();
                         this.activationDate.textContent = new Date(activationDate).toLocaleDateString();
@@ -482,6 +561,8 @@
                     await this.calculateScore();
                     
                 } catch (error) {
+                    console.error('Activation error:', error);
+                    
                     if (error.code === 4001) {
                         this.showStatus('❌ Transaction rejected by user', 'error');
                     } else if (error.message.includes('insufficient funds')) {
@@ -498,8 +579,8 @@
             }
             
             showTransactionLink(txHash) {
-                const chainId = this.web3 ? this.web3.currentProvider.chainId : '8453';
-                const baseScanUrl = chainId === '8453' 
+                const chainId = this.web3.currentProvider.chainId;
+                const baseScanUrl = chainId === '0x2105' || chainId === '8453' 
                     ? 'https://basescan.org/tx/' 
                     : 'https://sepolia.basescan.org/tx/';
                 
@@ -520,34 +601,10 @@
                     this.showLoading(true);
                     this.showStatus('🔍 Analyzing onchain data...', 'info');
                     
-                    // Получаем данные (Netlify функция или mock)
-                    try {
-                        const response = await fetch('/.netlify/functions/score', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                address: this.userAccount,
-                                activationDate: localStorage.getItem(`baseScore_activated_${this.userAccount}`),
-                                txHash: this.lastTransactionHash
-                            })
-                        });
-                        
-                        if (response.ok) {
-                            const scoreData = await response.json();
-                            this.displayScore(scoreData);
-                            this.showStatus('✅ Score calculated successfully!', 'success');
-                            return;
-                        }
-                    } catch (apiError) {
-                        console.log('Netlify function not available, using mock data');
-                    }
-                    
-                    // Fallback к mock данным
+                    // Используем mock данные (Netlify функция может быть не настроена)
                     const mockData = await this.getMockData();
                     this.displayScore(mockData);
-                    this.showStatus('✅ Score loaded successfully!', 'success');
+                    this.showStatus('✅ Score calculated successfully!', 'success');
                     
                 } catch (error) {
                     console.error('Score calculation error:', error);
@@ -646,7 +703,8 @@
                                 display: false
                             }
                         },
-                        y: {
+                        scales: {
+                            y: {
                                 beginAtZero: true,
                                 ticks: {
                                     stepSize: 2
@@ -689,10 +747,12 @@
             }
         }
         
+        // Инициализация приложения
         document.addEventListener('DOMContentLoaded', () => {
             window.baseScoreApp = new BaseScoreApp();
         });
         
+        // Слушаем изменения аккаунтов и сети
         if (window.ethereum) {
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length === 0) {
@@ -700,6 +760,11 @@
                 } else {
                     window.baseScoreApp.connectWallet();
                 }
+            });
+            
+            window.ethereum.on('chainChanged', (chainId) => {
+                console.log('Chain changed to:', chainId);
+                location.reload();
             });
         }
     </script>
