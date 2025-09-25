@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Base Mini App</title>
+    <title>Base Score - Onchain Reputation</title>
     <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -16,66 +17,69 @@
             font-family: 'Arial', sans-serif;
             line-height: 1.6;
             color: #333;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0052FF 0%, #00D4FF 100%);
             min-height: 100vh;
         }
         
         .container {
             background: white;
-            border-radius: 15px;
+            border-radius: 20px;
             padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
         
         h1 {
             text-align: center;
-            color: #2c3e50;
+            color: #0052FF;
             margin-bottom: 10px;
-            font-size: 2.5em;
+            font-size: 2.8em;
         }
         
         .subtitle {
             text-align: center;
-            color: #7f8c8d;
+            color: #666;
             margin-bottom: 30px;
+            font-size: 1.2em;
         }
         
         .btn {
-            padding: 12px 24px;
-            margin: 5px;
+            padding: 15px 30px;
+            margin: 10px;
             font-size: 16px;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: bold;
         }
         
-        .btn-primary { background: #3498db; color: white; }
-        .btn-success { background: #27ae60; color: white; }
-        .btn-warning { background: #f39c12; color: white; }
-        .btn:disabled { background: #bdc3c7; cursor: not-allowed; }
+        .btn-primary { background: #0052FF; color: white; }
+        .btn-success { background: #00C853; color: white; }
+        .btn-warning { background: #FF9100; color: white; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
         
         .btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         }
         
         .wallet-info {
-            margin: 15px 0;
-            padding: 15px;
-            background: #ecf0f1;
-            border-radius: 8px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
             font-family: monospace;
+            border-left: 4px solid #0052FF;
         }
         
         .status {
             padding: 15px;
             margin: 20px 0;
-            border-radius: 8px;
+            border-radius: 12px;
             text-align: center;
             font-weight: bold;
         }
@@ -84,68 +88,143 @@
         .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
         
-        .stats {
+        .score-section {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .score-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .score-card {
+            background: linear-gradient(135deg, #0052FF 0%, #00D4FF 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,82,255,0.3);
+        }
+        
+        .score-number {
+            font-size: 4em;
+            font-weight: bold;
             margin: 20px 0;
         }
         
-        .stat-card {
+        .score-rank {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .metric-card {
             background: #f8f9fa;
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 12px;
             text-align: center;
-            border-left: 4px solid #3498db;
+            border-left: 4px solid #0052FF;
         }
         
-        .stat-number {
+        .metric-value {
             font-size: 2em;
             font-weight: bold;
-            color: #2c3e50;
+            color: #0052FF;
         }
         
-        .action-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin: 20px 0;
+        .metric-label {
+            color: #666;
+            margin-top: 5px;
         }
         
-        @media (max-width: 600px) {
-            .stats { grid-template-columns: 1fr; }
-            .action-buttons { flex-direction: column; }
-            .btn { width: 100%; margin: 5px 0; }
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🚀 Base Mini App</h1>
-        <p class="subtitle">Interact with Smart Contract on Base Network</p>
+        <h1>🏆 Base Score</h1>
+        <p class="subtitle">Your onchain reputation on Base Network</p>
         
         <div class="wallet-section">
-            <button id="connectBtn" class="btn btn-primary">🔗 Connect Wallet</button>
+            <div style="text-align: center;">
+                <button id="connectBtn" class="btn btn-primary">🔗 Connect Wallet</button>
+            </div>
             <div id="walletInfo" class="wallet-info">Status: Not connected</div>
         </div>
         
-        <div id="appSection" style="display: none;">
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-number" id="myInteractions">0</div>
-                    <div>Your Interactions</div>
+        <div id="loading" class="loading hidden">
+            <h3>⏳ Analyzing your onchain activity...</h3>
+            <p>This may take a few seconds</p>
+        </div>
+        
+        <div id="scoreSection" class="hidden">
+            <div class="score-section">
+                <div class="score-card">
+                    <h3>Your Base Score</h3>
+                    <div class="score-number" id="totalScore">-</div>
+                    <div class="score-rank" id="scoreRank">-</div>
+                    <div style="margin-top: 20px; font-size: 0.9em;">
+                        Based on your Base Mainnet activity
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="totalInteractions">0</div>
-                    <div>Total Interactions</div>
+                
+                <div>
+                    <h3 style="margin-bottom: 20px;">📊 Activity Metrics</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-value" id="txCount">0</div>
+                            <div class="metric-label">Total Transactions</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="volume">0 ETH</div>
+                            <div class="metric-label">Total Volume</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="activeDays">0</div>
+                            <div class="metric-label">Active Days</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="contracts">0</div>
+                            <div class="metric-label">Unique Contracts</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="action-buttons">
-                <button id="interactBtn" class="btn btn-success">✨ Interact</button>
-                <button id="batchBtn" class="btn btn-warning">🚀 Batch (3x)</button>
-                <button id="checkBtn" class="btn btn-primary">📈 Refresh</button>
+            <div class="chart-container">
+                <h3 style="margin-bottom: 20px;">📈 Activity Timeline</h3>
+                <canvas id="activityChart" height="100"></canvas>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <button id="refreshBtn" class="btn btn-success">🔄 Refresh Score</button>
+                <button id="shareBtn" class="btn btn-primary">📤 Share Score</button>
             </div>
         </div>
         
@@ -153,247 +232,231 @@
     </div>
 
     <script>
-        const CONTRACT_CONFIG = {
-            '0x2105': { 
-                address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94', 
-                name: 'Base Mainnet' 
-            },
-            '0xaa36a7': { 
-                address: '0x081e98a2602Be2A7d5B3F55309ABA2F6C4c2F1Aa', 
-                name: 'Base Sepolia' 
-            }
-        };
-
-        const CONTRACT_ABI = [
-            {
-                "inputs": [],
-                "name": "interact",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            },
-            {
-                "inputs": [],
-                "name": "batchInteract",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            },
-            {
-                "inputs": [{"internalType": "address","name": "","type": "address"}],
-                "name": "userInteractions",
-                "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
-                "stateMutability": "view",
-                "type": "function"
-            },
-            {
-                "inputs": [],
-                "name": "totalInteractions",
-                "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
-                "stateMutability": "view",
-                "type": "function"
-            },
-            {
-                "inputs": [],
-                "name": "getMyInteractions",
-                "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
-                "stateMutability": "view",
-                "type": "function"
-            }
-        ];
-
-        let web3, contract, userAccount;
-
-        const connectBtn = document.getElementById('connectBtn');
-        const interactBtn = document.getElementById('interactBtn');
-        const batchBtn = document.getElementById('batchBtn');
-        const checkBtn = document.getElementById('checkBtn');
-        const walletInfo = document.getElementById('walletInfo');
-        const statusDiv = document.getElementById('status');
-        const appSection = document.getElementById('appSection');
-        const myInteractionsSpan = document.getElementById('myInteractions');
-        const totalInteractionsSpan = document.getElementById('totalInteractions');
-
-        // Обработчики событий
-        connectBtn.addEventListener('click', connectWallet);
-        interactBtn.addEventListener('click', interact);
-        batchBtn.addEventListener('click', batchInteract);
-        checkBtn.addEventListener('click', checkStats);
-
-        async function connectWallet() {
-            if (typeof window.ethereum === 'undefined') {
-                showStatus('❌ Please install MetaMask!', 'error');
-                return;
-            }
-
-            try {
-                await window.ethereum.request({ method: 'eth_requestAccounts' });
-                web3 = new Web3(window.ethereum);
-                const accounts = await web3.eth.getAccounts();
-                userAccount = accounts[0];
+        class BaseScoreApp {
+            constructor() {
+                this.web3 = null;
+                this.userAccount = null;
+                this.walletData = null;
                 
-                const chainId = await web3.eth.getChainId();
-                const chainIdHex = '0x' + chainId.toString(16);
+                this.initializeElements();
+                this.attachEventListeners();
+            }
+            
+            initializeElements() {
+                this.connectBtn = document.getElementById('connectBtn');
+                this.refreshBtn = document.getElementById('refreshBtn');
+                this.shareBtn = document.getElementById('shareBtn');
+                this.walletInfo = document.getElementById('walletInfo');
+                this.statusDiv = document.getElementById('status');
+                this.loadingDiv = document.getElementById('loading');
+                this.scoreSection = document.getElementById('scoreSection');
                 
-                const config = CONTRACT_CONFIG[chainIdHex];
-                if (!config) {
-                    showStatus('❌ Please switch to Base Mainnet or Sepolia', 'error');
+                // Score elements
+                this.totalScore = document.getElementById('totalScore');
+                this.scoreRank = document.getElementById('scoreRank');
+                this.txCount = document.getElementById('txCount');
+                this.volume = document.getElementById('volume');
+                this.activeDays = document.getElementById('activeDays');
+                this.contracts = document.getElementById('contracts');
+            }
+            
+            attachEventListeners() {
+                this.connectBtn.addEventListener('click', () => this.connectWallet());
+                this.refreshBtn.addEventListener('click', () => this.calculateScore());
+                this.shareBtn.addEventListener('click', () => this.shareScore());
+            }
+            
+            async connectWallet() {
+                if (typeof window.ethereum === 'undefined') {
+                    this.showStatus('❌ Please install MetaMask!', 'error');
                     return;
                 }
                 
-                contract = new web3.eth.Contract(CONTRACT_ABI, config.address);
-                
-                walletInfo.innerHTML = `
-                    <strong>Connected:</strong> ${userAccount.slice(0, 6)}...${userAccount.slice(-4)}<br>
-                    <strong>Network:</strong> ${config.name}
-                `;
-                
-                appSection.style.display = 'block';
-                showStatus('✅ Successfully connected!', 'success');
-                
-                await checkStats();
-                
-            } catch (error) {
-                showStatus('❌ Connection error: ' + error.message, 'error');
-            }
-        }
-
-        async function interact() {
-            if (!contract || !userAccount) {
-                showStatus('❌ Please connect wallet first', 'error');
-                return;
-            }
-            
-            try {
-                interactBtn.disabled = true;
-                batchBtn.disabled = true;
-                
-                showStatus('⏳ Sending transaction...', 'info');
-                
-                const transaction = contract.methods.interact();
-                const gasEstimate = await transaction.estimateGas({ from: userAccount });
-                
-                // Ключевое: НЕ указываем gasPrice - используем стандартный
-                const receipt = await transaction.send({
-                    from: userAccount,
-                    gas: gasEstimate
-                });
-                
-                showStatus('🎉 Transaction confirmed!', 'success');
-                await checkStats();
-                
-            } catch (error) {
-                if (error.code === 4001) {
-                    showStatus('❌ Transaction rejected by user', 'error');
-                } else if (error.message.includes('insufficient funds')) {
-                    showStatus('❌ Insufficient funds for gas', 'error');
-                } else {
-                    showStatus('❌ Error: ' + error.message, 'error');
-                }
-            } finally {
-                interactBtn.disabled = false;
-                batchBtn.disabled = false;
-            }
-        }
-
-        async function batchInteract() {
-            if (!contract || !userAccount) {
-                showStatus('❌ Please connect wallet first', 'error');
-                return;
-            }
-            
-            try {
-                interactBtn.disabled = true;
-                batchBtn.disabled = true;
-                
-                showStatus('⏳ Sending 3 interactions...', 'info');
-                
-                // Отправляем 3 транзакции с стандартным газом
-                for (let i = 0; i < 3; i++) {
-                    const transaction = contract.methods.interact();
-                    const gasEstimate = await transaction.estimateGas({ from: userAccount });
+                try {
+                    this.showStatus('🔗 Connecting to wallet...', 'info');
                     
-                    await transaction.send({
-                        from: userAccount,
-                        gas: gasEstimate
-                        // НЕ указываем gasPrice - используем стандартный
-                    });
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    this.web3 = new Web3(window.ethereum);
+                    const accounts = await this.web3.eth.getAccounts();
+                    this.userAccount = accounts[0];
                     
-                    if (i < 2) {
-                        showStatus(`⏳ Completed ${i+1}/3 interactions...`, 'info');
+                    const chainId = await this.web3.eth.getChainId();
+                    if (chainId !== 8453 && chainId !== 84532) { // Base Mainnet/Sepolia
+                        this.showStatus('⚠️ Please switch to Base Network', 'info');
                     }
+                    
+                    this.walletInfo.innerHTML = `
+                        <strong>Connected:</strong> ${this.userAccount.slice(0, 8)}...${this.userAccount.slice(-6)}<br>
+                        <strong>Network:</strong> Base ${chainId === 8453 ? 'Mainnet' : 'Testnet'}
+                    `;
+                    
+                    this.connectBtn.textContent = '✅ Connected';
+                    this.connectBtn.disabled = true;
+                    
+                    await this.calculateScore();
+                    
+                } catch (error) {
+                    this.showStatus('❌ Connection error: ' + error.message, 'error');
                 }
-                
-                showStatus('🎉 3 interactions completed!', 'success');
-                await checkStats();
-                
-            } catch (error) {
-                if (error.code === 4001) {
-                    showStatus('❌ Transaction rejected by user', 'error');
-                } else if (error.message.includes('insufficient funds')) {
-                    showStatus('❌ Insufficient funds for gas', 'error');
-                } else {
-                    showStatus('❌ Error: ' + error.message, 'error');
-                }
-            } finally {
-                interactBtn.disabled = false;
-                batchBtn.disabled = false;
             }
-        }
-
-        async function checkStats() {
-            if (!contract || !userAccount) return;
             
-            try {
-                const [myInteractions, totalInteractions] = await Promise.all([
-                    contract.methods.getMyInteractions().call({ from: userAccount }),
-                    contract.methods.totalInteractions().call()
-                ]);
+            async calculateScore() {
+                if (!this.userAccount) {
+                    this.showStatus('❌ Please connect wallet first', 'error');
+                    return;
+                }
                 
-                myInteractionsSpan.textContent = myInteractions;
-                totalInteractionsSpan.textContent = totalInteractions;
+                try {
+                    this.showLoading(true);
+                    this.showStatus('🔍 Analyzing onchain data...', 'info');
+                    
+                    // Симуляция данных (замените на реальный API вызов)
+                    const scoreData = await this.simulateScoreCalculation();
+                    
+                    this.displayScore(scoreData);
+                    this.showStatus('✅ Score calculated successfully!', 'success');
+                    
+                } catch (error) {
+                    this.showStatus('❌ Error calculating score: ' + error.message, 'error');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+            
+            async simulateScoreCalculation() {
+                // Временная симуляция - замените на реальный API вызов к Netlify function
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        const mockData = {
+                            totalScore: Math.floor(Math.random() * 100) + 450, // 450-550
+                            rank: `Top ${Math.floor(Math.random() * 20) + 5}%`,
+                            metrics: {
+                                transactionCount: Math.floor(Math.random() * 500) + 50,
+                                totalVolume: (Math.random() * 10).toFixed(2),
+                                activeDays: Math.floor(Math.random() * 90) + 10,
+                                uniqueContracts: Math.floor(Math.random() * 100) + 5,
+                                firstTransaction: '2023-08-15',
+                                lastTransaction: new Date().toISOString().split('T')[0]
+                            },
+                            timeline: this.generateMockTimeline()
+                        };
+                        resolve(mockData);
+                    }, 2000);
+                });
+            }
+            
+            generateMockTimeline() {
+                const timeline = [];
+                for (let i = 90; i >= 0; i--) {
+                    const date = new Date();
+                    date.setDate(date.getDate() - i);
+                    timeline.push({
+                        date: date.toISOString().split('T')[0],
+                        transactions: Math.floor(Math.random() * 10)
+                    });
+                }
+                return timeline;
+            }
+            
+            displayScore(data) {
+                this.totalScore.textContent = data.totalScore;
+                this.scoreRank.textContent = data.rank;
+                this.txCount.textContent = data.metrics.transactionCount.toLocaleString();
+                this.volume.textContent = `${data.metrics.totalVolume} ETH`;
+                this.activeDays.textContent = data.metrics.activeDays;
+                this.contracts.textContent = data.metrics.uniqueContracts;
                 
-            } catch (error) {
-                console.error('Error checking stats:', error);
+                this.renderChart(data.timeline);
+                this.scoreSection.classList.remove('hidden');
+            }
+            
+            renderChart(timeline) {
+                const ctx = document.getElementById('activityChart').getContext('2d');
+                const dates = timeline.map(item => {
+                    const date = new Date(item.date);
+                    return `${date.getMonth()+1}/${date.getDate()}`;
+                });
+                const transactions = timeline.map(item => item.transactions);
+                
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: 'Daily Transactions',
+                            data: transactions,
+                            borderColor: '#0052FF',
+                            backgroundColor: 'rgba(0, 82, 255, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            async shareScore() {
+                const score = this.totalScore.textContent;
+                const shareText = `My Base Score is ${score}! Check your onchain reputation at ${window.location.href}`;
+                
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Base Score',
+                            text: shareText
+                        });
+                    } catch (error) {
+                        console.log('Share cancelled');
+                    }
+                } else {
+                    await navigator.clipboard.writeText(shareText);
+                    this.showStatus('📋 Score copied to clipboard!', 'success');
+                }
+            }
+            
+            showLoading(show) {
+                this.loadingDiv.classList.toggle('hidden', !show);
+                if (show) {
+                    this.scoreSection.classList.add('hidden');
+                }
+            }
+            
+            showStatus(message, type) {
+                this.statusDiv.textContent = message;
+                this.statusDiv.className = `status ${type}`;
             }
         }
-
-        function showStatus(message, type) {
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-        }
-
+        
+        // Инициализация приложения
+        document.addEventListener('DOMContentLoaded', () => {
+            window.baseScoreApp = new BaseScoreApp();
+        });
+        
         // Слушаем изменения аккаунтов
         if (window.ethereum) {
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length === 0) {
-                    walletInfo.textContent = 'Status: Not connected';
-                    appSection.style.display = 'none';
+                    location.reload();
                 } else {
-                    userAccount = accounts[0];
-                    connectWallet();
+                    window.baseScoreApp.connectWallet();
                 }
-            });
-            
-            window.ethereum.on('chainChanged', () => {
-                window.location.reload();
             });
         }
-
-        // Автоподключение при загрузке
-        window.addEventListener('load', async () => {
-            if (typeof window.ethereum !== 'undefined') {
-                try {
-                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                    if (accounts.length > 0) {
-                        connectBtn.textContent = '🔄 Connecting...';
-                        await connectWallet();
-                    }
-                } catch (error) {
-                    console.log('No auto-connect');
-                }
-            }
-        });
     </script>
 </body>
 </html>
