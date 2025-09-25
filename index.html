@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Стили остаются такими же как в предыдущем коде */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -180,21 +181,22 @@
         }
         
         .transaction-info {
-            background: #e8f5e8;
-            border: 1px solid #c8e6c9;
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
             border-radius: 10px;
             padding: 15px;
             margin: 15px 0;
             text-align: center;
         }
         
-        .signature-info {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 15px 0;
-            font-size: 0.9em;
+        .tx-link {
+            color: #0052FF;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .tx-link:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -213,26 +215,21 @@
         <div id="activationSection" class="activation-section hidden">
             <div class="activation-icon">🔐</div>
             <h2>Activate Your Base Score</h2>
-            <p>Sign a message to activate your onchain reputation score. This is free and requires no gas fees!</p>
+            <p>Activate your onchain reputation by interacting with the smart contract.</p>
             
             <div class="transaction-info">
-                <strong>✅ No Gas Fees</strong><br>
-                <strong>✅ Free Activation</strong><br>
-                <strong>✅ Secure Message Signing</strong>
+                <strong>📝 Real Blockchain Transaction</strong><br>
+                <strong>💾 Permanent Onchain Record</strong><br>
+                <strong>🔗 Verifiable on BaseScan</strong><br>
+                <strong>⛽ Gas Fee: ~$0.02-0.05</strong>
             </div>
             
-            <div class="signature-info">
-                <strong>You'll sign:</strong><br>
-                "Activate Base Score: [timestamp]"<br>
-                <em>This proves you own the wallet without spending any funds</em>
-            </div>
-            
-            <button id="activateBtn" class="btn btn-success">✨ Sign & Activate Score</button>
+            <button id="activateBtn" class="btn btn-success">✨ Activate Score Onchain</button>
         </div>
         
         <div id="loading" class="loading hidden">
-            <h3>⏳ Processing activation...</h3>
-            <p>Please confirm the signature in your wallet</p>
+            <h3>⏳ Processing transaction...</h3>
+            <p>Please confirm the transaction in your wallet</p>
         </div>
         
         <div id="scoreSection" class="hidden">
@@ -244,6 +241,7 @@
                     <div style="margin-top: 20px; font-size: 0.9em;">
                         Activated on: <span id="activationDate">-</span>
                     </div>
+                    <div id="txLink" style="margin-top: 10px;"></div>
                 </div>
                 
                 <div>
@@ -277,7 +275,6 @@
             <div style="text-align: center; margin-top: 30px;">
                 <button id="refreshBtn" class="btn btn-success">🔄 Refresh Score</button>
                 <button id="shareBtn" class="btn btn-primary">📤 Share Score</button>
-                <button id="deactivateBtn" class="btn btn-danger">🗑️ Reset Score</button>
             </div>
         </div>
         
@@ -285,15 +282,58 @@
     </div>
 
     <script>
+        // Конфигурация вашего контракта
+        const ACTIVATION_CONTRACT = {
+            address: '0x6d5ef3fCbc582d760eA083f2CAe4E7Ef3d941f94', // Ваш контракт
+            abi: [
+                {
+                    "inputs": [],
+                    "name": "interact",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "batchInteract",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [{"internalType": "address","name": "","type": "address"}],
+                    "name": "userInteractions",
+                    "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "totalInteractions",
+                    "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "getMyInteractions",
+                    "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+            ]
+        };
+
         class BaseScoreApp {
             constructor() {
                 this.web3 = null;
                 this.userAccount = null;
+                this.activationContract = null;
                 this.isActivated = false;
+                this.lastTransactionHash = null;
                 
                 this.initializeElements();
                 this.attachEventListeners();
-                this.checkExistingActivation();
             }
             
             initializeElements() {
@@ -301,12 +341,12 @@
                 this.activateBtn = document.getElementById('activateBtn');
                 this.refreshBtn = document.getElementById('refreshBtn');
                 this.shareBtn = document.getElementById('shareBtn');
-                this.deactivateBtn = document.getElementById('deactivateBtn');
                 this.walletInfo = document.getElementById('walletInfo');
                 this.statusDiv = document.getElementById('status');
                 this.loadingDiv = document.getElementById('loading');
                 this.activationSection = document.getElementById('activationSection');
                 this.scoreSection = document.getElementById('scoreSection');
+                this.txLink = document.getElementById('txLink');
                 
                 // Score elements
                 this.totalScore = document.getElementById('totalScore');
@@ -323,15 +363,6 @@
                 this.activateBtn.addEventListener('click', () => this.activateScore());
                 this.refreshBtn.addEventListener('click', () => this.calculateScore());
                 this.shareBtn.addEventListener('click', () => this.shareScore());
-                this.deactivateBtn.addEventListener('click', () => this.deactivateScore());
-            }
-            
-            checkExistingActivation() {
-                // Проверяем есть ли уже активация для любого кошелька
-                const keys = Object.keys(localStorage).filter(key => key.startsWith('baseScore_activated_'));
-                if (keys.length > 0) {
-                    console.log('Found existing activation:', keys[0]);
-                }
             }
             
             async connectWallet() {
@@ -349,19 +380,24 @@
                     this.userAccount = accounts[0];
                     
                     const chainId = await this.web3.eth.getChainId();
-                    if (chainId !== 8453 && chainId !== 84532) { // Base Mainnet/Sepolia
-                        this.showStatus('⚠️ Please switch to Base Network for accurate data', 'info');
+                    if (chainId !== 8453 && chainId !== 84532) {
+                        this.showStatus('⚠️ Please switch to Base Network', 'info');
                     }
+                    
+                    // Инициализируем контракт
+                    this.activationContract = new this.web3.eth.Contract(
+                        ACTIVATION_CONTRACT.abi, 
+                        ACTIVATION_CONTRACT.address
+                    );
                     
                     this.walletInfo.innerHTML = `
                         <strong>Connected:</strong> ${this.userAccount.slice(0, 8)}...${this.userAccount.slice(-6)}<br>
-                        <strong>Network:</strong> ${this.getNetworkName(chainId)}
+                        <strong>Network:</strong> Base ${chainId === 8453 ? 'Mainnet' : 'Testnet'}
                     `;
                     
                     this.connectBtn.textContent = '✅ Connected';
                     this.connectBtn.disabled = true;
                     
-                    // Проверяем активацию
                     await this.checkActivation();
                     
                 } catch (error) {
@@ -369,33 +405,46 @@
                 }
             }
             
-            getNetworkName(chainId) {
-                const networks = {
-                    1: 'Ethereum Mainnet',
-                    8453: 'Base Mainnet',
-                    84532: 'Base Sepolia',
-                    11155111: 'Sepolia'
-                };
-                return networks[chainId] || `Chain ${chainId}`;
-            }
-            
             async checkActivation() {
-                const activationKey = `baseScore_activated_${this.userAccount}`;
-                const activationDate = localStorage.getItem(activationKey);
-                
-                if (activationDate) {
-                    this.isActivated = true;
-                    this.activationDate.textContent = new Date(activationDate).toLocaleDateString();
-                    this.showStatus('✅ Score activated! Loading data...', 'success');
-                    await this.calculateScore();
-                } else {
+                try {
+                    this.showStatus('🔍 Checking activation status...', 'info');
+                    
+                    // Проверяем взаимодействия с контрактом
+                    const userInteractions = await this.activationContract.methods
+                        .getMyInteractions()
+                        .call({ from: this.userAccount });
+                    
+                    this.isActivated = parseInt(userInteractions) > 0;
+                    
+                    if (this.isActivated) {
+                        this.showStatus('✅ Already activated onchain!', 'success');
+                        
+                        // Получаем дату активации из localStorage или используем текущую
+                        const activationDate = localStorage.getItem(`baseScore_activated_${this.userAccount}`) || 
+                                              new Date().toISOString();
+                        this.activationDate.textContent = new Date(activationDate).toLocaleDateString();
+                        
+                        // Показываем ссылку на транзакцию если есть
+                        const txHash = localStorage.getItem(`baseScore_tx_${this.userAccount}`);
+                        if (txHash) {
+                            this.showTransactionLink(txHash);
+                        }
+                        
+                        await this.calculateScore();
+                    } else {
+                        this.activationSection.classList.remove('hidden');
+                        this.showStatus('⚠️ Onchain activation required', 'info');
+                    }
+                    
+                } catch (error) {
+                    console.error('Activation check error:', error);
                     this.activationSection.classList.remove('hidden');
-                    this.showStatus('🔐 Sign message to activate your score', 'info');
+                    this.showStatus('🔐 Activate onchain to continue', 'info');
                 }
             }
             
             async activateScore() {
-                if (!this.web3 || !this.userAccount) {
+                if (!this.activationContract || !this.userAccount) {
                     this.showStatus('❌ Please connect wallet first', 'error');
                     return;
                 }
@@ -403,31 +452,42 @@
                 try {
                     this.activateBtn.disabled = true;
                     this.showLoading(true);
-                    this.showStatus('⏳ Waiting for signature...', 'info');
+                    this.showStatus('⏳ Waiting for transaction confirmation...', 'info');
                     
-                    // Создаем уникальное сообщение для подписи
-                    const timestamp = Date.now();
-                    const message = `Activate Base Score: ${timestamp}`;
+                    // Вызываем функцию interact() вашего контракта
+                    const transaction = this.activationContract.methods.interact();
+                    const gasEstimate = await transaction.estimateGas({ 
+                        from: this.userAccount 
+                    });
                     
-                    // Запрашиваем подпись
-                    const signature = await this.web3.eth.personal.sign(message, this.userAccount, '');
+                    // Отправляем реальную транзакцию в блокчейн
+                    const receipt = await transaction.send({
+                        from: this.userAccount,
+                        gas: gasEstimate
+                    });
                     
-                    // Сохраняем активацию
-                    const activationDate = new Date().toISOString();
-                    localStorage.setItem(`baseScore_activated_${this.userAccount}`, activationDate);
-                    localStorage.setItem(`baseScore_signature_${this.userAccount}`, signature);
-                    localStorage.setItem(`baseScore_message_${this.userAccount}`, message);
+                    // Сохраняем хэш транзакции
+                    this.lastTransactionHash = receipt.transactionHash;
+                    localStorage.setItem(`baseScore_tx_${this.userAccount}`, receipt.transactionHash);
+                    localStorage.setItem(`baseScore_activated_${this.userAccount}`, new Date().toISOString());
                     
-                    this.showStatus('🎉 Score activated successfully!', 'success');
+                    this.showStatus('🎉 Onchain activation successful!', 'success');
                     this.isActivated = true;
                     this.activationSection.classList.add('hidden');
-                    this.activationDate.textContent = new Date(activationDate).toLocaleDateString();
+                    this.activationDate.textContent = new Date().toLocaleDateString();
+                    
+                    // Показываем ссылку на транзакцию
+                    this.showTransactionLink(receipt.transactionHash);
                     
                     await this.calculateScore();
                     
                 } catch (error) {
                     if (error.code === 4001) {
-                        this.showStatus('❌ Signature rejected by user', 'error');
+                        this.showStatus('❌ Transaction rejected by user', 'error');
+                    } else if (error.message.includes('insufficient funds')) {
+                        this.showStatus('❌ Insufficient funds for gas', 'error');
+                    } else if (error.message.includes('execution reverted')) {
+                        this.showStatus('❌ Contract interaction failed', 'error');
                     } else {
                         this.showStatus('❌ Activation error: ' + error.message, 'error');
                     }
@@ -435,6 +495,19 @@
                     this.activateBtn.disabled = false;
                     this.showLoading(false);
                 }
+            }
+            
+            showTransactionLink(txHash) {
+                const chainId = this.web3 ? this.web3.currentProvider.chainId : '8453';
+                const baseScanUrl = chainId === '8453' 
+                    ? 'https://basescan.org/tx/' 
+                    : 'https://sepolia.basescan.org/tx/';
+                
+                this.txLink.innerHTML = `
+                    <a href="${baseScanUrl}${txHash}" target="_blank" class="tx-link">
+                        📜 View Transaction on BaseScan
+                    </a>
+                `;
             }
             
             async calculateScore() {
@@ -447,7 +520,7 @@
                     this.showLoading(true);
                     this.showStatus('🔍 Analyzing onchain data...', 'info');
                     
-                    // Пробуем получить данные из Netlify функции
+                    // Получаем данные (Netlify функция или mock)
                     try {
                         const response = await fetch('/.netlify/functions/score', {
                             method: 'POST',
@@ -456,7 +529,8 @@
                             },
                             body: JSON.stringify({
                                 address: this.userAccount,
-                                activationDate: localStorage.getItem(`baseScore_activated_${this.userAccount}`)
+                                activationDate: localStorage.getItem(`baseScore_activated_${this.userAccount}`),
+                                txHash: this.lastTransactionHash
                             })
                         });
                         
@@ -484,7 +558,6 @@
             }
             
             async getMockData() {
-                // Генерируем реалистичные данные на основе адреса кошелька
                 const addressHash = this.userAccount ? 
                     parseInt(this.userAccount.slice(2, 10), 16) : Math.random() * 1000;
                 
@@ -509,7 +582,6 @@
                     const date = new Date(baseDate);
                     date.setDate(date.getDate() - i);
                     
-                    // Более реалистичное распределение транзакций
                     const dayOfWeek = date.getDay();
                     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
                     const baseTransactions = isWeekend ? 1 : 3;
@@ -538,7 +610,6 @@
             renderChart(timeline) {
                 const ctx = document.getElementById('activityChart').getContext('2d');
                 
-                // Очищаем предыдущий chart если есть
                 if (this.activityChart) {
                     this.activityChart.destroy();
                 }
@@ -573,25 +644,12 @@
                         plugins: {
                             legend: {
                                 display: false
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false
                             }
                         },
-                        scales: {
-                            y: {
+                        y: {
                                 beginAtZero: true,
                                 ticks: {
                                     stepSize: 2
-                                },
-                                grid: {
-                                    color: 'rgba(0,0,0,0.1)'
-                                }
-                            },
-                            x: {
-                                grid: {
-                                    display: false
                                 }
                             }
                         }
@@ -618,19 +676,6 @@
                 }
             }
             
-            deactivateScore() {
-                if (confirm('Are you sure you want to reset your score? This will clear your activation data.')) {
-                    localStorage.removeItem(`baseScore_activated_${this.userAccount}`);
-                    localStorage.removeItem(`baseScore_signature_${this.userAccount}`);
-                    localStorage.removeItem(`baseScore_message_${this.userAccount}`);
-                    
-                    this.isActivated = false;
-                    this.scoreSection.classList.add('hidden');
-                    this.activationSection.classList.remove('hidden');
-                    this.showStatus('🔐 Score reset. Sign again to activate.', 'info');
-                }
-            }
-            
             showLoading(show) {
                 this.loadingDiv.classList.toggle('hidden', !show);
                 if (show) {
@@ -644,12 +689,10 @@
             }
         }
         
-        // Инициализация приложения
         document.addEventListener('DOMContentLoaded', () => {
             window.baseScoreApp = new BaseScoreApp();
         });
         
-        // Слушаем изменения аккаунтов
         if (window.ethereum) {
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length === 0) {
@@ -657,10 +700,6 @@
                 } else {
                     window.baseScoreApp.connectWallet();
                 }
-            });
-            
-            window.ethereum.on('chainChanged', () => {
-                location.reload();
             });
         }
     </script>
